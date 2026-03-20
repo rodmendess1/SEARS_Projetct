@@ -1,0 +1,17 @@
+Em termos de software, temos de desenvolver um modelo de inteligencia que consiga definir quando armanezenar energia nas baterias,
+quando usar a energia das baterias na casa, quando comprar energia da rede, quando usar a energia das baterias para vender para a rede.
+Estas decisões têm de ser tomadas com base: nos preços de mercado, para saber quando comprar/vender a energia; previsão solar, para
+saber quando tem de encher as baterias ou quando pode vender para a rede; perfis de consumo da casa, para os mesmo fins.
+
+Em termos de hardware, vou deixar uma fotografia em anexo do esquema. Vamos ter um barramento DC que está ligado a 4 sitios:
+1- Conversor DC/DC que liga ao Micro-Inversor que por sua vez liga à rede
+2- Conversor DC/DC que por sua vez liga aos paneis solares
+3- 2 Conversor DC/DC unidirecionais que estão ligados por sua vez a uma bateria que decidem quando carregar as baterias ou 
+fornecer energia ao barramento
+4- Conversor que 230V/Voltagem do barramento que liga à rede.
+Basicamente o barramento DC tem de estar estável, e o nosso modelo de inteligencia artificial tem de garantir essa estabilidade com
+base na produção feita pelos paineis, no gasto causado pela carga, no fornecimento da rede ect.
+
+Em termos de comunicação vamos ter 2 ESP32 um no quadro com os sensores de tensão e corrente para termos acesso aos dados de consumo
+a longo prazo e o outro a controlar os 4 conversores DC/DC. Por sua vez, estes ESP32 têm de comunicar com um Raspberry Pi onde vai 
+correr o nosso modelo de inteligência artificial e tomar/enviar a decisão para o sistema.
