@@ -1,37 +1,49 @@
 import paho.mqtt.client as mqtt
+import json
 
-# Configurações do Broker
-BROKER = "localhost" 
-PORT = 1883
+BROKER = "localhost"
+PORTA = 1883
+TOPICO_BASE = "sears/#"
 
-# Função chamada quando uma mensagem chega
-def on_message(client, userdata, message):
-    topic = message.topic
-    payload = message.payload.decode("utf-8")
+def ao_receber_mensagem(client, userdata, message):
+    payload_raw = message.payload.decode("utf-8")
     
-    print(f"--- Nova Mensagem Recebida ---")
+    print(f"\n" + "="*45)
+    print(f"📡 TÓPICO: {message.topic}")
     
-    # Lógica para distinguir os ESP32 pelos tópicos
-    if "quadro" in topic:
-        print(f"[ESP32 #1 - QUADRO] Tópico: {topic} | Valor: {payload}")
-        # Aqui no futuro podemos guardar na Base de Dados
+    try:
+        dados = json.loads(payload_raw)
         
-    elif "barramento" in topic:
-        print(f"[ESP32 #2 - BARRAMENTO] Tópico: {topic} | Valor: {payload}")
-        
-    else:
-        print(f"[OUTRO] Tópico: {topic} | Valor: {payload}")
+        # Verifica se é a nossa estrutura aninhada
+        if "metadata" in dados and "payload" in dados:
+            meta = dados["metadata"]
+            load = dados["payload"]
+            
+            print(f"🆔 ID: {meta['device_id']} | 🕒 {meta['timestamp'][:19]}")
+            print("-" * 45)
+            
+            # Se for a mensagem dos preços, mostra a lista
+            if "precos" in load:
+                # Usamos 'data_referencia' para bater certo com o Publisher
+                data_alvo = load.get('data_referencia', 'Desconhecida')
+                print(f"📅 PREÇOS PARA: {data_alvo} ({load['unidade']})")
+                precos = load["precos"]
+                for h in sorted(precos.keys(), key=int):
+                    print(f"  {int(h):02d}h: {precos[h]:.5f} €/kWh")
+            else:
+                print(f"Conteúdo: {load}")
+        else:
+            print(f"JSON Simples: {dados}")
 
-# Configuração do Cliente
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "RPi_Subscriber")
-client.on_message = on_message
+    except json.JSONDecodeError:
+        print(f"VALOR BRUTO: {payload_raw}")
+    
+    print("="*45)
 
-print(f"A ligar ao broker {BROKER}...")
-client.connect(BROKER, PORT)
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "RPi_Monitor")
+client.on_message = ao_receber_mensagem
+client.connect(BROKER, PORTA)
+client.subscribe(TOPICO_BASE)
 
-# Subscrever a todos os tópicos que comecem por 'sears/'
-# O '#' é um wildcard (coringa) que apanha tudo o que vier depois
-client.subscribe("sears/#")
-
-print("Aguardando dados... (Ctrl+C para sair)")
+print("A aguardar dados em tempo real... (Ctrl+C para parar)")
 client.loop_forever()
