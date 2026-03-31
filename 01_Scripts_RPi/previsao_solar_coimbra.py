@@ -2,7 +2,7 @@ import requests
 from datetime import datetime
 
 # --- CONFIGURAÇÃO SEARS ---
-# ATENÇÃO: Substitui o texto abaixo pela tua chave real do OpenWeatherMap
+# Chave de API do OpenWeatherMap
 API_KEY = "5883339336b5a0385f3dae2afbd43f75" 
 
 LAT = "40.2033"  # Coimbra
@@ -71,5 +71,4 @@ if __name__ == "__main__":
     if previsao:
         print("\n✅ Dados extraídos com sucesso para o Modelo de Decisão SEARS.")
 
-        # Preciso de criar a API key no OpenWeatherMap
         
