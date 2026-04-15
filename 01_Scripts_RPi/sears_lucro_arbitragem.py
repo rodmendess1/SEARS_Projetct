@@ -12,7 +12,7 @@ def vale_a_pena_vender(preco_venda, preco_compra, eficiencia=0.85, custo_degrada
     # O valor real que entra no bolso depois das perdas do inversor/bateria
     receita_efetiva = preco_venda * eficiencia
     
-    # O custo real da energia que tens armazenada
+    # O custo real da energia armazenada
     custo_total = preco_compra + custo_degradacao
     
     margem = receita_efetiva - custo_total
