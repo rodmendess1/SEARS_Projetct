@@ -62,7 +62,31 @@ def extrair_e_publicar_omie():
         print(f"[SUCESSO] Preços enviados para o tópico '{TOPICO}'!")
 
     except Exception as e:
-        print(f"[ERRO CRÍTICO] Falha na integração: {e}")
-
+        print(f"[AVISO] Falha na rede/API: {e}")
+        print("[FALLBACK] A usar preços padrão (0.15€/kWh) por segurança...")
+        
+        # Cria um dicionário com 0.15€ para todas as 24h
+        precos_fallback = {str(h): 0.15 for h in range(24)}
+        
+        mensagem_fallback = {
+            "metadata": {
+                "device_id": "sears_gateway_01",
+                "timestamp": datetime.now().isoformat(),
+                "sensor_type": "fallback_api"
+            },
+            "payload": {
+                "data_referencia": datetime.now().strftime("%Y-%m-%d"),
+                "unidade": "EUR/kWh",
+                "precos": precos_fallback,
+                "nota": "DADOS_PADRAO_POR_FALHA_INTERNET"
+            }
+        }
+        
+        # Publica o Fallback
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        client.connect(BROKER, PORTA, 60)
+        client.publish(TOPICO, json.dumps(mensagem_fallback), retain=True)
+        client.disconnect()
+        
 if __name__ == "__main__":
     extrair_e_publicar_omie()
