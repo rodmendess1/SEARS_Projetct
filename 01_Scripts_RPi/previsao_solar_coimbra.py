@@ -1,5 +1,11 @@
+import json
+import paho.mqtt.client as mqtt
 import requests
 from datetime import datetime
+
+# --- CONFIGURAÇÃO MQTT ---
+BROKER = "localhost"
+TOPICO_METEO = "sears/meteo"
 
 # --- CONFIGURAÇÃO SEARS ---
 # Chave de API do OpenWeatherMap
@@ -48,6 +54,21 @@ def obter_previsao_coimbra():
             # Print formatado para o teu terminal
             status = "☀️ Sol" if nuvens < 20 else "☁️ Nuvens" if nuvens < 80 else "🌧️ Encoberto"
             print(f"[{hora_str}] {temp:>5.1f}°C | {status:<12} ({nuvens:>3}% nuvens)")
+
+        # --- PUBLICAÇÃO MQTT DOS DADOS REAIS ---
+        try:
+            # Pegamos no valor de nuvens da hora mais próxima (primeiro item da lista)
+            nuvens_atual = dados['list'][0]['clouds']['all']
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+            client.connect(BROKER, 1883)
+            msg = {
+                "metadata": {"device_id": "rpi_meteo", "timestamp": datetime.now().isoformat(), "status": "OK"},
+                "payload": {"percentagem_nuvens": nuvens_atual}
+            }
+            client.publish(TOPICO_METEO, json.dumps(msg), retain=True)
+            client.disconnect()
+        except Exception as mqtt_err:
+            print(f"Aviso: Dados lidos mas não publicados no MQTT: {mqtt_err}")
             
         return previsoes_tempo
 
@@ -56,6 +77,20 @@ def obter_previsao_coimbra():
         return None
     except Exception as e:
         print(f"\n❌ Erro inesperado no código: {e}")
+        # --- NOVO: GESTÃO DE FALHAS (FALLBACK) ---
+        print("[FALLBACK] A enviar valor padrão (50% nuvens) via MQTT por segurança...")
+        try:
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+            client.connect(BROKER, 1883)
+            msg_fb = {
+                "metadata": {"device_id": "rpi_meteo", "timestamp": datetime.now().isoformat(), "status": "FALLBACK"},
+                "payload": {"percentagem_nuvens": 50} # Valor médio padrão
+            }
+            client.publish(TOPICO_METEO, json.dumps(msg_fb), retain=True)
+            client.disconnect()
+        except:
+            pass
+
         return None
 
 # --- Execução de Teste ---

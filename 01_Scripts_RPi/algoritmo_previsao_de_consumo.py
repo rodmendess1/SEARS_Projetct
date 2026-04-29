@@ -1,22 +1,25 @@
 import sqlite3
 import pandas as pd
+import json
+import paho.mqtt.client as mqtt
 from datetime import datetime
 
-# Nome do ficheiro que o 'database_logger.py' cria
+# --- CONFIGURAÇÃO ---
 DB_NAME = "sears_data.db" 
+BROKER = "localhost"
+TOPICO_PREVISAO = "sears/previsao/consumo"
 
-print(f"A ligar à base de dados '{DB_NAME}' para análise IA...")
+print(f"--- SEARS IA: Algoritmo de Previsão de Consumo ---")
 
 try:
-    # 1. Ligar ao ficheiro da base de dados
+    # 1. Ligar à Base de Dados
     conn = sqlite3.connect(DB_NAME)
 
-    # 2. Procurar dados de consumo
-    # Nota: Certificar que o simulador envia 'consumo_casa' no sensor_type
+    # 2. QUERY CORRIGIDA (Alinhada com o novo Database Logger)
+    # Tabela: telemetria_ac | Coluna: p_ativa
     query = """
-        SELECT timestamp, potencia_w 
-        FROM telemetria 
-        WHERE tipo_sensor = 'consumo_casa' 
+        SELECT timestamp, p_ativa as potencia_w 
+        FROM telemetria_ac 
         ORDER BY timestamp ASC
     """
 
@@ -24,7 +27,7 @@ try:
     conn.close()
 
     if df.empty:
-        print("[AVISO] A base de dados existe mas ainda não tem dados de 'consumo_casa'.")
+        print("[AVISO] Ainda não há dados suficientes na tabela 'telemetria_ac'.")
     else:
         # 3. Processamento de Datas
         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -36,7 +39,6 @@ try:
         df_hora.rename(columns={'potencia_w': 'consumo_real_w'}, inplace=True)
 
         # 5. Algoritmo EMA (Média Móvel Exponencial)
-        # O 'span=3' significa que ele dá muito peso aos últimos 3 dias
         df_hora['previsao_ia_w'] = df_hora.groupby('hora')['consumo_real_w'] \
                                 .transform(lambda x: x.ewm(span=3, adjust=False).mean().shift(1))
 
@@ -47,17 +49,39 @@ try:
         historico = df_hora[df_hora['hora'] == proxima_hora]
         
         if len(historico) < 2:
-            print(f"[IA] A aguardar mais dados históricos para a hora {proxima_hora}:00...")
+            print(f"[IA] A aguardar mais histórico para a hora {proxima_hora}:00...")
         else:
             ultimo_real = historico['consumo_real_w'].iloc[-1]
             ultima_prev = historico['previsao_ia_w'].iloc[-1]
             if pd.isna(ultima_prev): ultima_prev = ultimo_real
                 
             alpha = 2 / (3 + 1)
-            previsao_final = (ultimo_real * alpha) + (ultima_prev * (1 - alpha))
+            previsao_final = round((ultimo_real * alpha) + (ultima_prev * (1 - alpha)), 2)
             
-            print(f"\n✅ ANÁLISE CONCLUÍDA")
-            print(f"Previsão de consumo para as {proxima_hora}:00 -> {previsao_final:.0f} W")
+            # --- NOVO: PUBLICAR RESULTADO PARA O SISTEMA ---
+            try:
+                client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+                client.connect(BROKER, 1883)
+                
+                msg = {
+                    "metadata": {
+                        "device_id": "ia_predictor",
+                        "timestamp": datetime.now().isoformat(),
+                        "metodo": "EMA_Span3"
+                    },
+                    "payload": {
+                        "proxima_hora": proxima_hora,
+                        "previsao_w": previsao_final,
+                        "unidade": "W"
+                    }
+                }
+                client.publish(TOPICO_PREVISAO, json.dumps(msg), retain=True)
+                client.disconnect()
+                
+                print(f"✅ PREVISÃO CONCLUÍDA")
+                print(f"Consumo estimado para as {proxima_hora}:00 -> {previsao_final} W (Enviado via MQTT)")
+            except Exception as e:
+                print(f"[ERRO MQTT] Não foi possível publicar a previsão: {e}")
 
 except sqlite3.OperationalError:
-    print(f"[ERRO] Não encontrei o ficheiro '{DB_NAME}'. Garante que o logger já correu pelo menos uma vez.")
+    print(f"[ERRO] Base de dados '{DB_NAME}' não encontrada ou sem tabelas AC.")
